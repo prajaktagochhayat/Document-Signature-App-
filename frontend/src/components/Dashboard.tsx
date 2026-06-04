@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UploadPanel } from './UploadPanel';
+import { Editor } from './Editor';
 import { FileText, Calendar, ChevronRight, Eye, Trash2, Search, CheckCircle, Clock, XCircle, Share2, Award, Info, FileSpreadsheet } from 'lucide-react';
 
 interface Document {
@@ -20,6 +21,7 @@ export const Dashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Signed' | 'Rejected'>('All');
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [signatures, setSignatures] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
 
   const fetchDocuments = async () => {
     try {
@@ -220,10 +222,7 @@ export const Dashboard: React.FC = () => {
             {/* Quick Actions */}
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => {
-                  // Direct edit / sign action placeholder for Day 6
-                  alert('Editor functionality will be added on Day 6!');
-                }}
+                onClick={() => setIsEditing(true)}
                 className="py-2.5 px-3 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] cursor-pointer"
               >
                 <Award className="w-4 h-4" />
@@ -326,6 +325,23 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Editor Modal Integration */}
+      {isEditing && selectedDoc && (
+        <Editor
+          documentId={selectedDoc.id}
+          documentName={selectedDoc.name}
+          pdfUrl={getPdfUrl(selectedDoc.file_path)}
+          onClose={() => setIsEditing(false)}
+          onSaveSuccess={() => {
+            fetchDocuments();
+            // Refetch signatures
+            axios.get(`${API_URL}/signatures/${selectedDoc.id}`)
+              .then((res) => setSignatures(res.data))
+              .catch((err) => console.error(err));
+          }}
+        />
+      )}
     </div>
   );
 };
