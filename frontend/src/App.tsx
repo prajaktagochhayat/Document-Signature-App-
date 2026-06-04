@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from './context/AuthContext';
 import { AuthScreen } from './components/AuthScreen';
+import { Dashboard } from './components/Dashboard';
 import { LogOut, User, Feather, Sparkles } from 'lucide-react';
 
 function App() {
@@ -54,20 +55,9 @@ function App() {
         </div>
       </header>
 
-      {/* Main Dashboard Workspace Placeholder for Day 2 */}
-      <main className="flex-1 p-8 flex flex-col items-center justify-center">
-        <div className="pastel-card p-10 rounded-3xl max-w-md w-full text-center border-2 border-brand-100 flex flex-col items-center bg-white">
-          <div className="w-14 h-14 bg-pastel-green-light rounded-full flex items-center justify-center mb-4 border border-pastel-green-border">
-            <span className="text-2xl">✨</span>
-          </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Auth Active!</h2>
-          <p className="text-slate-400 text-sm font-medium mb-4">
-            You have successfully authenticated as <span className="text-brand-500 font-bold">{user.email}</span>.
-          </p>
-          <div className="px-4 py-2 bg-pastel-green-light border border-pastel-green-border text-pastel-green-text text-xs rounded-2xl font-extrabold animate-pulse-pastel">
-            Ready for Day 3: File Upload API
-          </div>
-        </div>
+      {/* Dashboard Workspace */}
+      <main className="flex-1">
+        <Dashboard />
       </main>
     </div>
   );

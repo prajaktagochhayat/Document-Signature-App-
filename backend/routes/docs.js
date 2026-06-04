@@ -101,4 +101,35 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
   }
 });
 
+// List User's Documents
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const list = await db.documents.listByOwner(req.user.id);
+    res.json(list);
+  } catch (error: any) {
+    console.error('List documents error:', error);
+    res.status(500).json({ error: error.message || 'Failed to list documents.' });
+  }
+});
+
+// Get Document Details
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const doc = await db.documents.findById(req.params.id);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+    
+    // Check ownership
+    if (doc.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized access to this document.' });
+    }
+
+    res.json(doc);
+  } catch (error: any) {
+    console.error('Get document error:', error);
+    res.status(500).json({ error: error.message || 'Failed to retrieve document.' });
+  }
+});
+
 export default router;
