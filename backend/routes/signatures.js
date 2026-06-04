@@ -225,4 +225,271 @@ router.post('/finalize', authMiddleware, async (req, res) => {
   }
 });
 
+// Generate public tokenized link for signature request
+router.post('/request', authMiddleware, async (req, res) => {
+  try {
+    const { signatureId } = req.body;
+    if (!signatureId) {
+      return res.status(400).json({ error: 'Please provide signatureId.' });
+    }
+
+    const sig = await db.signatures.findById(signatureId);
+    if (!sig) {
+      return res.status(404).json({ error: 'Signature field not found.' });
+    }
+
+    const doc = await db.documents.findById(sig.document_id);
+    if (!doc) {
+      return res.status(404).json({ error: 'Associated document not found.' });
+    }
+
+    // Sign token with JWT
+    const JWT_SECRET = process.env.JWT_SECRET || 'super_cute_and_secure_jwt_secret_key_12345';
+    const token = jwt.sign({ signatureId: sig.id, documentId: doc.id }, JWT_SECRET, { expiresIn: '7d' });
+
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const link = `${FRONTEND_URL}/sign/${token}`;
+
+    console.log(`[Email Sent to ${sig.signer_email}]: Hey, you have been requested to sign document "${doc.name}". Click here: ${link}`);
+
+    // Log the audit trail action
+    await db.auditLogs.create({
+      documentId: doc.id,
+      action: `Sent signature request email to ${sig.signer_email}`,
+      userEmail: req.user.email,
+      ipAddress: req.ip || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || ''
+    });
+
+    res.json({
+      message: 'Signature request generated',
+      link,
+      signerEmail: sig.signer_email
+    });
+  } catch (error: any) {
+    console.error('Request signature error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create signature link.' });
+  }
+});
+
+// Verify public tokenized link (used by Guest Signer)
+router.get('/verify/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const JWT_SECRET = process.env.JWT_SECRET || 'super_cute_and_secure_jwt_secret_key_12345';
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ error: 'Signature token is invalid or has expired.' });
+    }
+
+    const sig = await db.signatures.findById(decoded.signatureId);
+    if (!sig) {
+      return res.status(404).json({ error: 'Signature placeholder no longer exists.' });
+    }
+
+    const doc = await db.documents.findById(decoded.documentId);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    res.json({
+      signature: sig,
+      document: {
+        id: doc.id,
+        name: doc.name,
+        file_path: doc.file_path,
+        status: doc.status
+      }
+    });
+  } catch (error: any) {
+    console.error('Verify token error:', error);
+    res.status(500).json({ error: error.message || 'Verification failed.' });
+  }
+});
+
+// Process Guest Signing Action
+router.post('/guest-sign/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { signatureImageBase64, status, reason } = req.body; // status can be 'Signed' or 'Rejected'
+
+    const JWT_SECRET = process.env.JWT_SECRET || 'super_cute_and_secure_jwt_secret_key_12345';
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ error: 'Invalid or expired signature token.' });
+    }
+
+    const sig = await db.signatures.findById(decoded.signatureId);
+    if (!sig) {
+      return res.status(404).json({ error: 'Signature placeholder not found.' });
+    }
+    if (sig.status !== 'Pending') {
+      return res.status(400).json({ error: `This document signature is already ${sig.status}.` });
+    }
+
+    const doc = await db.documents.findById(decoded.documentId);
+    if (!doc) {
+      return res.status(404).json({ error: 'Associated document not found.' });
+    }
+
+    if (status === 'Rejected') {
+      // 1. Update signature in database
+      await db.signatures.updateStatus(sig.id, {
+        status: 'Rejected',
+        reason: reason || 'Rejected by signer'
+      });
+
+      // Update original document status to Rejected
+      await db.documents.updateStatus(doc.id, 'Rejected');
+
+      // 2. Log Audit Log
+      await db.auditLogs.create({
+        documentId: doc.id,
+        action: `Signature Rejected by ${sig.signer_email}. Reason: ${reason || 'None provided'}`,
+        userEmail: sig.signer_email,
+        ipAddress: req.ip || '127.0.0.1',
+        userAgent: req.headers['user-agent'] || ''
+      });
+
+      return res.json({
+        message: 'Signature request rejected',
+        status: 'Rejected'
+      });
+    }
+
+    // Otherwise: Process 'Signed' Status
+    // We will draw the signature visual and compile the final PDF
+    let pdfBytes;
+    const documentFileName = path.basename(doc.file_path);
+
+    if (isSupabaseConfigured) {
+      const bucketName = process.env.SUPABASE_BUCKET_NAME || 'pdfs';
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .download(documentFileName);
+
+      if (error) {
+        console.error('Supabase download error:', error);
+        return res.status(500).json({ error: 'Failed to download original PDF.' });
+      }
+      pdfBytes = await data.arrayBuffer();
+    } else {
+      const localPath = path.join(UPLOADS_DIR, documentFileName);
+      if (!fs.existsSync(localPath)) {
+        return res.status(404).json({ error: 'Original PDF file not found.' });
+      }
+      pdfBytes = fs.readFileSync(localPath);
+    }
+
+    // Load PDF
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const pages = pdfDoc.getPages();
+    const standardFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    // Embed Signature Image if provided
+    let embeddedImage;
+    if (signatureImageBase64) {
+      const base64Data = signatureImageBase64.replace(/^data:image\/png;base64,/, "");
+      const imgBuffer = Buffer.from(base64Data, 'base64');
+      embeddedImage = await pdfDoc.embedPng(imgBuffer);
+    }
+
+    // Draw on page
+    const targetPageNum = Math.min(sig.page - 1, pages.length - 1);
+    const targetPage = pages[targetPageNum];
+    const { width, height } = targetPage.getSize();
+
+    const xPos = (sig.x / 100) * width;
+    const yPos = height - ((sig.y / 100) * height) - 40;
+
+    if (embeddedImage) {
+      targetPage.drawImage(embeddedImage, {
+        x: xPos,
+        y: yPos,
+        width: 110,
+        height: 35,
+      });
+    } else {
+      targetPage.drawText(`Signed by: ${sig.signer_email}`, {
+        x: xPos,
+        y: yPos + 15,
+        size: 9,
+        font: standardFont,
+        color: rgb(0.1, 0.4, 0.8),
+      });
+    }
+
+    // Update signature status to Signed
+    await db.signatures.updateStatus(sig.id, {
+      status: 'Signed',
+      signedAt: new Date().toISOString()
+    });
+
+    // Save modified PDF
+    const modifiedPdfBytes = await pdfDoc.save();
+    const finalizedFileName = `signed_${Date.now()}_${documentFileName}`;
+    let finalizedFilePath = '';
+
+    if (isSupabaseConfigured) {
+      const bucketName = process.env.SUPABASE_BUCKET_NAME || 'pdfs';
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(finalizedFileName, modifiedPdfBytes, {
+          contentType: 'application/pdf',
+          upsert: true
+        });
+
+      if (error) {
+        console.error('Supabase upload signed PDF error:', error);
+        return res.status(500).json({ error: 'Failed to upload finalized PDF.' });
+      }
+
+      const { data: urlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(finalizedFileName);
+
+      finalizedFilePath = urlData.publicUrl;
+    } else {
+      const localSignedPath = path.join(UPLOADS_DIR, finalizedFileName);
+      fs.writeFileSync(localSignedPath, modifiedPdfBytes);
+      finalizedFilePath = `/uploads/${finalizedFileName}`;
+    }
+
+    // Save signed document record
+    const updatedDoc = await db.documents.create({
+      name: `signed_${doc.name}`,
+      filePath: finalizedFilePath,
+      ownerId: doc.owner_id,
+      status: 'Signed'
+    });
+
+    // Mark original document as 'Signed'
+    await db.documents.updateStatus(doc.id, 'Signed');
+
+    // Create Audit Log
+    await db.auditLogs.create({
+      documentId: doc.id,
+      action: `Document signed by guest ${sig.signer_email}`,
+      userEmail: sig.signer_email,
+      ipAddress: req.ip || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || ''
+    });
+
+    res.json({
+      message: 'Document signed successfully by guest',
+      status: 'Signed',
+      pdfUrl: finalizedFilePath
+    });
+  } catch (error: any) {
+    console.error('Guest signing error:', error);
+    res.status(500).json({ error: error.message || 'Failed to sign document.' });
+  }
+});
+
 export default router;

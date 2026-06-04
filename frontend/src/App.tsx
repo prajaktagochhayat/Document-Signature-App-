@@ -2,10 +2,20 @@ import React from 'react';
 import { useAuth } from './context/AuthContext';
 import { AuthScreen } from './components/AuthScreen';
 import { Dashboard } from './components/Dashboard';
+import { GuestSignScreen } from './components/GuestSignScreen';
 import { LogOut, User, Feather, Sparkles } from 'lucide-react';
 
 function App() {
   const { user, loading, logout } = useAuth();
+
+  // Simple Router for Public Sign Links
+  const path = window.location.pathname;
+  const isSignLink = path.startsWith('/sign/');
+  const signToken = isSignLink ? path.split('/sign/')[1] : null;
+
+  if (isSignLink && signToken) {
+    return <GuestSignScreen token={signToken} />;
+  }
 
   if (loading) {
     return (

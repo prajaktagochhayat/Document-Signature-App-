@@ -298,16 +298,35 @@ export const Dashboard: React.FC = () => {
                 <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
                   {signatures.map((sig: any) => (
                     <div key={sig.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 border border-slate-100 rounded-xl">
-                      <span className="font-bold text-slate-600 truncate max-w-[150px]">{sig.signer_email}</span>
-                      <span className={`px-2 py-0.5 border text-[10px] rounded-full font-bold ${
-                        sig.status === 'Signed'
-                          ? 'bg-pastel-green-light border-pastel-green-border text-pastel-green-text'
-                          : sig.status === 'Rejected'
-                          ? 'bg-pastel-pink-light border-pastel-pink-border text-pastel-pink-text'
-                          : 'bg-pastel-orange-light border-pastel-orange-border text-pastel-orange-text animate-pulse-pastel'
-                      }`}>
-                        Pg {sig.page} ({sig.status})
-                      </span>
+                      <span className="font-bold text-slate-600 truncate max-w-[120px]">{sig.signer_email}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 border text-[10px] rounded-full font-bold ${
+                          sig.status === 'Signed'
+                            ? 'bg-pastel-green-light border-pastel-green-border text-pastel-green-text'
+                            : sig.status === 'Rejected'
+                            ? 'bg-pastel-pink-light border-pastel-pink-border text-pastel-pink-text'
+                            : 'bg-pastel-orange-light border-pastel-orange-border text-pastel-orange-text animate-pulse-pastel'
+                        }`}>
+                          Pg {sig.page} ({sig.status})
+                        </span>
+                        {sig.status === 'Pending' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await axios.post(`${API_URL}/signatures/request`, { signatureId: sig.id });
+                                navigator.clipboard.writeText(response.data.link);
+                                alert(`Link copied for ${sig.signer_email}!`);
+                              } catch (err) {
+                                alert('Failed to generate link');
+                              }
+                            }}
+                            className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-brand-500 cursor-pointer"
+                            title="Copy Guest Sign Link"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
