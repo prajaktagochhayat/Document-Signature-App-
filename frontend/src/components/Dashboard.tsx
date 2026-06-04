@@ -23,6 +23,7 @@ export const Dashboard: React.FC = () => {
   const [signatures, setSignatures] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const handleFinalize = async () => {
     if (!selectedDoc) return;
@@ -66,8 +67,13 @@ export const Dashboard: React.FC = () => {
       axios.get(`${API_URL}/signatures/${selectedDoc.id}`)
         .then((res) => setSignatures(res.data))
         .catch((err) => console.error(err));
+      
+      axios.get(`${API_URL}/audit/${selectedDoc.id}`)
+        .then((res) => setAuditLogs(res.data))
+        .catch((err) => console.error(err));
     } else {
       setSignatures([]);
+      setAuditLogs([]);
     }
   }, [selectedDoc]);
 
@@ -360,15 +366,32 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Placeholder for Audit Trail - Day 10 */}
-            <div className="p-4 bg-pastel-purple-light/20 border border-pastel-purple-border/30 rounded-2xl">
+            {/* Audit Trail - Day 10 */}
+            <div className="p-4 bg-pastel-purple-light/20 border border-pastel-purple-border/30 rounded-2xl space-y-3">
               <h4 className="text-xs font-bold text-pastel-purple-text flex items-center gap-1">
                 <Info className="w-3.5 h-3.5" />
-                Audit Trail & History
+                Audit Trail & History ({auditLogs.length})
               </h4>
-              <p className="text-xs text-slate-400 font-semibold mt-1">
-                Timeline logs and IP audits will be displayed here in Day 10.
-              </p>
+              {auditLogs.length === 0 ? (
+                <p className="text-xs text-slate-400 font-semibold pl-1">No log entries found.</p>
+              ) : (
+                <div className="space-y-3 max-h-40 overflow-y-auto pr-1 text-xs">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="relative pl-4 border-l border-brand-200">
+                      <div className="absolute w-2 h-2 bg-brand-400 rounded-full -left-[5px] top-1"></div>
+                      <div className="font-bold text-slate-700 leading-tight">
+                        {log.action}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                        {log.user_email} • {log.ip_address}
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-semibold">
+                        {new Date(log.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (

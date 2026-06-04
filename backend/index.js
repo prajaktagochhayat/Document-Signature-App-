@@ -22,9 +22,12 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+import auditRouter from './routes/audit.js';
+
 app.use('/api/auth', authRouter);
 app.use('/api/docs', docsRouter);
 app.use('/api/signatures', signaturesRouter);
+app.use('/api/audit', auditRouter);
 
 // Serving static files from uploads in dev if needed
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
