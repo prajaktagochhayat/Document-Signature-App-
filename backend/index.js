@@ -12,9 +12,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Import Routers
+import authRouter from './routes/auth.js';
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Routes
+app.use('/api/auth', authRouter);
 
 // Serving static files from uploads in dev if needed
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
