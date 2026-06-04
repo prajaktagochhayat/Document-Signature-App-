@@ -19,6 +19,7 @@ export const Dashboard: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Signed' | 'Rejected'>('All');
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [signatures, setSignatures] = useState<any[]>([]);
 
   const fetchDocuments = async () => {
     try {
@@ -38,6 +39,16 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDocuments();
   }, []);
+
+  useEffect(() => {
+    if (selectedDoc) {
+      axios.get(`${API_URL}/signatures/${selectedDoc.id}`)
+        .then((res) => setSignatures(res.data))
+        .catch((err) => console.error(err));
+    } else {
+      setSignatures([]);
+    }
+  }, [selectedDoc]);
 
   const getPdfUrl = (filePath: string) => {
     if (filePath.startsWith('http')) {
@@ -234,6 +245,35 @@ export const Dashboard: React.FC = () => {
             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500">Signing Status</span>
               {getStatusBadge(selectedDoc.status)}
+            </div>
+
+            {/* Signature Requests Panel */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-500 block px-1">
+                Signature Placeholders ({signatures.length})
+              </span>
+              {signatures.length === 0 ? (
+                <p className="text-xs text-slate-400 pl-1 font-semibold">
+                  No signature fields placed on this document yet. Click "Sign Document" to place placeholders.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  {signatures.map((sig: any) => (
+                    <div key={sig.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 border border-slate-100 rounded-xl">
+                      <span className="font-bold text-slate-600 truncate max-w-[150px]">{sig.signer_email}</span>
+                      <span className={`px-2 py-0.5 border text-[10px] rounded-full font-bold ${
+                        sig.status === 'Signed'
+                          ? 'bg-pastel-green-light border-pastel-green-border text-pastel-green-text'
+                          : sig.status === 'Rejected'
+                          ? 'bg-pastel-pink-light border-pastel-pink-border text-pastel-pink-text'
+                          : 'bg-pastel-orange-light border-pastel-orange-border text-pastel-orange-text animate-pulse-pastel'
+                      }`}>
+                        Pg {sig.page} ({sig.status})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* PDF Preview Frame */}
