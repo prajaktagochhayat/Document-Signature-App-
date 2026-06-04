@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 5000;
 
 // Import Routers
 import authRouter from './routes/auth.js';
+import docsRouter from './routes/docs.js';
 
 // Middleware
 app.use(cors());
@@ -21,6 +22,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/docs', docsRouter);
 
 // Serving static files from uploads in dev if needed
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
