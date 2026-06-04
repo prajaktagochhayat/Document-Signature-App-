@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UploadPanel } from './UploadPanel';
 import { Editor } from './Editor';
-import { FileText, Calendar, ChevronRight, Eye, Trash2, Search, CheckCircle, Clock, XCircle, Share2, Award, Info, FileSpreadsheet } from 'lucide-react';
+import { FileText, Calendar, ChevronRight, Eye, Trash2, Search, CheckCircle, Clock, XCircle, Share2, Award, Info, FileSpreadsheet, Plus } from 'lucide-react';
 
 interface Document {
   id: string;
@@ -22,6 +22,25 @@ export const Dashboard: React.FC = () => {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [signatures, setSignatures] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+
+  const handleFinalize = async () => {
+    if (!selectedDoc) return;
+    setFinalizing(true);
+    try {
+      const response = await axios.post(`${API_URL}/signatures/finalize`, {
+        documentId: selectedDoc.id,
+      });
+      alert('Document compiled and signed successfully!');
+      fetchDocuments();
+      setSelectedDoc(response.data.signedDocument || null);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.error || 'Failed to finalize PDF.');
+    } finally {
+      setFinalizing(false);
+    }
+  };
 
   const fetchDocuments = async () => {
     try {
@@ -221,23 +240,43 @@ export const Dashboard: React.FC = () => {
 
             {/* Quick Actions */}
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setIsEditing(true)}
-                className="py-2.5 px-3 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] cursor-pointer"
-              >
-                <Award className="w-4 h-4" />
-                Sign Document
-              </button>
-              <button
-                onClick={() => {
-                  // Sharing placeholder for Day 9
-                  alert('Sharing links functionality will be added on Day 9!');
-                }}
-                className="py-2.5 px-3 bg-pastel-purple-light border border-pastel-purple-border text-pastel-purple-text hover:bg-brand-100 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer"
-              >
-                <Share2 className="w-4 h-4" />
-                Share Link
-              </button>
+              {selectedDoc.status === 'Signed' ? (
+                <a
+                  href={getPdfUrl(selectedDoc.file_path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="col-span-2 py-2.5 px-3 bg-pastel-green-solid hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] text-center"
+                >
+                  <Award className="w-4 h-4" />
+                  Download Signed PDF
+                </a>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="py-2.5 px-3 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Place Fields
+                  </button>
+                  <button
+                    onClick={handleFinalize}
+                    disabled={finalizing || signatures.length === 0}
+                    className={`py-2.5 px-3 bg-pastel-green-light border border-pastel-green-border text-pastel-green-text hover:bg-emerald-50 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer ${
+                      finalizing || signatures.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {finalizing ? (
+                      <span className="w-4 h-4 border-2 border-pastel-green-text/30 border-t-pastel-green-text rounded-full animate-spin"></span>
+                    ) : (
+                      <>
+                        <Award className="w-4 h-4" />
+                        Compile & Sign
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Status Info */}
