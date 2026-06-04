@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Quicksand', sans-serif;
+  
+  --color-brand-50: #F5F3FF;
+  --color-brand-100: #EDE9FE;
+  --color-brand-200: #DDD6FE;
+  --color-brand-300: #C4B5FD;
+  --color-brand-400: #A78BFA;
+  --color-brand-500: #8B5CF6;
+  --color-brand-600: #7C3AED;
+  --color-brand-700: #6D28D9;
+
+  --color-pastel-purple-light: #F5F3FF;
+  --color-pastel-purple-border: #DDD6FE;
+  --color-pastel-purple-text: #7C3AED;
+  --color-pastel-purple-solid: #8B5CF6;
+
+  --color-pastel-green-light: #ECFDF5;
+  --color-pastel-green-border: #A7F3D0;
+  --color-pastel-green-text: #059669;
+  --color-pastel-green-solid: #10B981;
+
+  --color-pastel-pink-light: #FFF1F2;
+  --color-pastel-pink-border: #FECDD3;
+  --color-pastel-pink-text: #E11D48;
+  --color-pastel-pink-solid: #F43F5E;
+
+  --color-pastel-orange-light: #FFF7ED;
+  --color-pastel-orange-border: #FFEDD5;
+  --color-pastel-orange-text: #D97706;
+  --color-pastel-orange-solid: #F97316;
+
+  --color-pastel-blue-light: #F0F9FF;
+  --color-pastel-blue-border: #BAE6FD;
+  --color-pastel-blue-text: #0284C7;
+  --color-pastel-blue-solid: #3B82F6;
+}
+
+@layer base {
+  body {
+    background-color: #FFFFFF;
+    color: #1E293B;
+  }
+  
+  /* Smooth scroll and selection colors */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  ::selection {
+    background-color: #DDD6FE;
+    color: #5B21B6;
+  }
+}
+
+/* Cute Pastel Micro-Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes pulse-pastel {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-pastel {
+  animation: pulse-pastel 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom Pastel Card Styling */
+.pastel-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(243, 244, 246, 1);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pastel-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.05);
+}

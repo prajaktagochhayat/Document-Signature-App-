@@ -1,0 +1,38 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+build/
+.svelte-kit
+.next
+.nuxt
+
+# Env files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Backend uploads and logs
+backend/uploads/
+*.log
