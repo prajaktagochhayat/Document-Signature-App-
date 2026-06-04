@@ -1,0 +1,15 @@
+[
+  {
+    "id": "sig_1780603953510_wd9k1nkma",
+    "document_id": "doc_1780603953509_wc5ezcjw9",
+    "user_id": null,
+    "x": 20,
+    "y": 65,
+    "page": 1,
+    "status": "Pending",
+    "signer_email": "bob@example.com",
+    "reason": "",
+    "signed_at": null,
+    "created_at": "2026-06-04T20:12:33.510Z"
+  }
+]
