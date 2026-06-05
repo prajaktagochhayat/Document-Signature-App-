@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Eye, Award, XCircle, Sparkles, Feather, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
+import { SignaturePad } from './SignaturePad';
 
 interface GuestSignScreenProps {
   token: string;
@@ -17,6 +18,7 @@ export const GuestSignScreen: React.FC<GuestSignScreenProps> = ({ token }) => {
   const [success, setSuccess] = useState<string | null>(null);
   const [isRejected, setIsRejected] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [showPad, setShowPad] = useState(false);
 
   const verifyToken = async () => {
     try {
@@ -36,13 +38,14 @@ export const GuestSignScreen: React.FC<GuestSignScreenProps> = ({ token }) => {
     verifyToken();
   }, [token]);
 
-  const handleSign = async () => {
+  const handleSign = async (base64Image: string) => {
+    setShowPad(false);
     setSigning(true);
     setError(null);
     try {
       const response = await axios.post(`${API_URL}/signatures/guest-sign/${token}`, {
         status: 'Signed',
-        // In Day 11 we will pass the actual base64 PNG drawing!
+        signatureImageBase64: base64Image
       });
       setSuccess('Document signed successfully!');
       setDocDetails((prev: any) => ({ ...prev, status: 'Signed' }));
@@ -225,7 +228,7 @@ export const GuestSignScreen: React.FC<GuestSignScreenProps> = ({ token }) => {
                 {/* Main Guest Actions */}
                 <div className="space-y-3">
                   <button
-                    onClick={handleSign}
+                    onClick={() => setShowPad(true)}
                     disabled={signing || signatureDetails?.status !== 'Pending'}
                     className={`w-full py-3 px-4 bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white text-xs font-bold rounded-2xl shadow-md shadow-brand-100 hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       signing || signatureDetails?.status !== 'Pending' ? 'opacity-70 cursor-not-allowed' : ''
@@ -283,6 +286,14 @@ export const GuestSignScreen: React.FC<GuestSignScreenProps> = ({ token }) => {
         </div>
 
       </main>
+
+      {/* Signature Pad Modal Overlay */}
+      {showPad && (
+        <SignaturePad
+          onSave={handleSign}
+          onClose={() => setShowPad(false)}
+        />
+      )}
     </div>
   );
 };
