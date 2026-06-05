@@ -3,6 +3,7 @@ import axios from 'axios';
 import { UploadPanel } from './UploadPanel';
 import { Editor } from './Editor';
 import { FileText, Calendar, ChevronRight, Eye, Trash2, Search, CheckCircle, Clock, XCircle, Share2, Award, Info, FileSpreadsheet, Plus } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
 interface Document {
   id: string;
@@ -33,6 +34,11 @@ export const Dashboard: React.FC = () => {
         documentId: selectedDoc.id,
       });
       alert('Document compiled and signed successfully!');
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
       fetchDocuments();
       setSelectedDoc(response.data.signedDocument || null);
     } catch (err: any) {

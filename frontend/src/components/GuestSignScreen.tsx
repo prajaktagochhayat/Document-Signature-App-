@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Eye, Award, XCircle, Sparkles, Feather, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
+import confetti from 'canvas-confetti';
 
 interface GuestSignScreenProps {
   token: string;
@@ -48,6 +49,11 @@ export const GuestSignScreen: React.FC<GuestSignScreenProps> = ({ token }) => {
         signatureImageBase64: base64Image
       });
       setSuccess('Document signed successfully!');
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
       setDocDetails((prev: any) => ({ ...prev, status: 'Signed' }));
       setSignatureDetails((prev: any) => ({ ...prev, status: 'Signed' }));
     } catch (err: any) {
