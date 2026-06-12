@@ -85,12 +85,15 @@ export const db = {
 
     async create({ name, email, passwordHash }) {
       const newUser = {
-        id: isSupabaseConfigured ? undefined : `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name,
         email: email.toLowerCase(),
         password: passwordHash,
         created_at: new Date().toISOString()
       };
+
+      if (!isSupabaseConfigured) {
+        newUser.id = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
@@ -112,13 +115,16 @@ export const db = {
   documents: {
     async create({ name, filePath, ownerId, status = 'Pending' }) {
       const newDoc = {
-        id: isSupabaseConfigured ? undefined : `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name,
         file_path: filePath,
         owner_id: ownerId,
         status,
         created_at: new Date().toISOString()
       };
+
+      if (!isSupabaseConfigured) {
+        newDoc.id = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
@@ -190,7 +196,6 @@ export const db = {
   signatures: {
     async create({ documentId, userId = null, x, y, page = 1, status = 'Pending', signerEmail = '', reason = '' }) {
       const newSig = {
-        id: isSupabaseConfigured ? undefined : `sig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         document_id: documentId,
         user_id: userId,
         x: parseFloat(x),
@@ -202,6 +207,10 @@ export const db = {
         signed_at: status === 'Signed' ? new Date().toISOString() : null,
         created_at: new Date().toISOString()
       };
+
+      if (!isSupabaseConfigured) {
+        newSig.id = `sig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
@@ -275,7 +284,6 @@ export const db = {
   auditLogs: {
     async create({ documentId, action, userEmail = 'system', ipAddress = '127.0.0.1', userAgent = '' }) {
       const newLog = {
-        id: isSupabaseConfigured ? undefined : `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         document_id: documentId,
         action,
         user_email: userEmail.toLowerCase(),
@@ -283,6 +291,10 @@ export const db = {
         user_agent: userAgent,
         created_at: new Date().toISOString()
       };
+
+      if (!isSupabaseConfigured) {
+        newLog.id = `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase

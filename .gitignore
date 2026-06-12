@@ -36,3 +36,7 @@ Thumbs.db
 # Backend uploads and logs
 backend/uploads/
 *.log
+
+# Reports and diagrams
+generate_report.py
+signy_architecture_diagram.png

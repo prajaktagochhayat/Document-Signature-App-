@@ -16,9 +16,6 @@ const registerSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-type LoginInput = z.infer<typeof loginSchema>;
-type RegisterInput = z.infer<typeof registerSchema>;
-
 export const AuthScreen: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState<string | null>(null);

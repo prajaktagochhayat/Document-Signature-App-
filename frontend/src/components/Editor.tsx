@@ -20,6 +20,16 @@ interface Placeholder {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+const PDFIframe = React.memo(({ url }: { url: string }) => {
+  return (
+    <iframe
+      src={`${url}#toolbar=0`}
+      title="PDF Canvas View"
+      className="w-full h-full border-none pointer-events-none opacity-80"
+    />
+  );
+});
+
 export const Editor: React.FC<EditorProps> = ({
   documentId,
   documentName,
@@ -31,6 +41,21 @@ export const Editor: React.FC<EditorProps> = ({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    axios.get(`${API_URL}/docs/${documentId}/dimensions`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    .then((res) => {
+      setDimensions(res.data);
+    })
+    .catch((err) => {
+      console.error('Failed to get dimensions in editor', err);
+      setDimensions({ width: 612, height: 792 }); // default portrait Letter fallback
+    });
+  }, [documentId]);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
 
@@ -183,14 +208,13 @@ export const Editor: React.FC<EditorProps> = ({
               {/* PDF Container Wrapper */}
               <div
                 ref={containerRef}
-                className="relative w-full h-[550px] bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden select-none"
+                style={dimensions ? { aspectRatio: `${dimensions.width} / ${dimensions.height}` } : {}}
+                className={`relative w-full bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden select-none ${
+                  dimensions ? 'h-auto' : 'h-[550px]'
+                }`}
               >
                 {/* Embed PDF inside background */}
-                <iframe
-                  src={`${pdfUrl}#toolbar=0`}
-                  title="PDF Canvas View"
-                  className="w-full h-full border-none pointer-events-none opacity-80"
-                />
+                <PDFIframe url={pdfUrl} />
 
                 {/* Overlaid placeholders */}
                 {placeholders.map((sig) => (

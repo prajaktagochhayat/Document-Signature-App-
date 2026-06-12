@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import jwt from 'jsonwebtoken';
 import { authMiddleware } from '../middleware/auth.js';
 import { db, isSupabaseConfigured, supabase } from '../db.js';
 
@@ -16,7 +17,7 @@ router.get('/:docId', authMiddleware, async (req, res) => {
   try {
     const list = await db.signatures.listByDocId(req.params.docId);
     res.json(list);
-  } catch (error: any) {
+  } catch (error) {
     console.error('List signatures error:', error);
     res.status(500).json({ error: error.message || 'Failed to list signatures.' });
   }
@@ -63,7 +64,7 @@ router.post('/', authMiddleware, async (req, res) => {
       message: 'Signature placeholder saved successfully',
       signature
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Save signature error:', error);
     res.status(500).json({ error: error.message || 'Failed to save signature position.' });
   }
@@ -219,26 +220,182 @@ router.post('/finalize', authMiddleware, async (req, res) => {
       signedDocument: updatedDoc,
       pdfUrl: finalizedFilePath
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Finalize document error:', error);
     res.status(500).json({ error: error.message || 'Failed to finalize and sign PDF.' });
+  }
+});
+
+// Self-Sign Document
+router.post('/self-sign', authMiddleware, async (req, res) => {
+  try {
+    const { documentId, signatureImageBase64, x, y, page } = req.body;
+
+    if (!documentId || !signatureImageBase64 || x === undefined || y === undefined) {
+      return res.status(400).json({ error: 'Please provide documentId, signatureImageBase64, and coordinates (x, y).' });
+    }
+
+    const doc = await db.documents.findById(documentId);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    // 1. Create a signed signature record in database
+    const sig = await db.signatures.create({
+      documentId,
+      userId: req.user.id,
+      x,
+      y,
+      page: page || 1,
+      status: 'Signed',
+      signerEmail: req.user.email,
+    });
+
+    // 2. Load PDF bytes
+    let pdfBytes;
+    const documentFileName = path.basename(doc.file_path);
+
+    if (isSupabaseConfigured) {
+      const bucketName = process.env.SUPABASE_BUCKET_NAME || 'pdfs';
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .download(documentFileName);
+
+      if (error) {
+        console.error('Supabase download error:', error);
+        return res.status(500).json({ error: 'Failed to download original PDF from storage.' });
+      }
+      pdfBytes = await data.arrayBuffer();
+    } else {
+      const localPath = path.join(UPLOADS_DIR, documentFileName);
+      if (!fs.existsSync(localPath)) {
+        return res.status(404).json({ error: 'Original PDF file not found on disk.' });
+      }
+      pdfBytes = fs.readFileSync(localPath);
+    }
+
+    // 3. Manipulate PDF using PDF-Lib
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const pages = pdfDoc.getPages();
+
+    // Embed signature drawing image
+    const base64Data = signatureImageBase64.replace(/^data:image\/png;base64,/, "");
+    const imgBuffer = Buffer.from(base64Data, 'base64');
+    const embeddedImage = await pdfDoc.embedPng(imgBuffer);
+
+    // Draw signature
+    const targetPageNum = Math.min((page || 1) - 1, pages.length - 1);
+    const targetPage = pages[targetPageNum];
+    const { width, height } = targetPage.getSize();
+
+    const xPos = (x / 100) * width;
+    const yPos = height - ((y / 100) * height) - 40;
+
+    targetPage.drawImage(embeddedImage, {
+      x: xPos,
+      y: yPos,
+      width: 110,
+      height: 35,
+    });
+
+    // 4. Save modified PDF
+    const modifiedPdfBytes = await pdfDoc.save();
+    const finalizedFileName = `signed_${Date.now()}_${documentFileName}`;
+    let finalizedFilePath = '';
+
+    if (isSupabaseConfigured) {
+      const bucketName = process.env.SUPABASE_BUCKET_NAME || 'pdfs';
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(finalizedFileName, modifiedPdfBytes, {
+          contentType: 'application/pdf',
+          upsert: true
+        });
+
+      if (error) {
+        console.error('Supabase upload signed PDF error:', error);
+        return res.status(500).json({ error: 'Failed to upload finalized PDF.' });
+      }
+
+      const { data: urlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(finalizedFileName);
+
+      finalizedFilePath = urlData.publicUrl;
+    } else {
+      const localSignedPath = path.join(UPLOADS_DIR, finalizedFileName);
+      fs.writeFileSync(localSignedPath, modifiedPdfBytes);
+      finalizedFilePath = `/uploads/${finalizedFileName}`;
+    }
+
+    // 5. Update document record status and path
+    const updatedDoc = await db.documents.create({
+      name: `signed_${doc.name}`,
+      filePath: finalizedFilePath,
+      ownerId: doc.owner_id,
+      status: 'Signed'
+    });
+
+    // Mark original document as 'Signed'
+    await db.documents.updateStatus(doc.id, 'Signed');
+
+    // 6. Log the audit trail action
+    await db.auditLogs.create({
+      documentId: doc.id,
+      action: 'Document Self-Signed and Finalized',
+      userEmail: req.user.email,
+      ipAddress: req.ip || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || ''
+    });
+
+    res.json({
+      message: 'Document signed successfully',
+      signedDocument: updatedDoc,
+      pdfUrl: finalizedFilePath
+    });
+  } catch (error) {
+    console.error('Self-sign document error:', error);
+    res.status(500).json({ error: error.message || 'Failed to self-sign PDF.' });
   }
 });
 
 // Generate public tokenized link for signature request
 router.post('/request', authMiddleware, async (req, res) => {
   try {
-    const { signatureId } = req.body;
-    if (!signatureId) {
-      return res.status(400).json({ error: 'Please provide signatureId.' });
+    const { signatureId, documentId, signerEmail } = req.body;
+    
+    let sig;
+    let doc;
+    
+    if (signatureId) {
+      sig = await db.signatures.findById(signatureId);
+      if (!sig) {
+        return res.status(404).json({ error: 'Signature field not found.' });
+      }
+      doc = await db.documents.findById(sig.document_id);
+    } else {
+      if (!documentId || !signerEmail) {
+        return res.status(400).json({ error: 'Please provide signatureId or documentId and signerEmail.' });
+      }
+      doc = await db.documents.findById(documentId);
+      if (!doc) {
+        return res.status(404).json({ error: 'Document not found.' });
+      }
+      if (doc.owner_id !== req.user.id) {
+        return res.status(403).json({ error: 'Unauthorized.' });
+      }
+      
+      // Create new signature placeholder with default coordinates
+      sig = await db.signatures.create({
+        documentId,
+        x: 50,
+        y: 50,
+        page: 1,
+        status: 'Pending',
+        signerEmail: signerEmail.toLowerCase()
+      });
     }
 
-    const sig = await db.signatures.findById(signatureId);
-    if (!sig) {
-      return res.status(404).json({ error: 'Signature field not found.' });
-    }
-
-    const doc = await db.documents.findById(sig.document_id);
     if (!doc) {
       return res.status(404).json({ error: 'Associated document not found.' });
     }
@@ -266,11 +423,12 @@ router.post('/request', authMiddleware, async (req, res) => {
       link,
       signerEmail: sig.signer_email
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Request signature error:', error);
     res.status(500).json({ error: error.message || 'Failed to create signature link.' });
   }
 });
+
 
 // Verify public tokenized link (used by Guest Signer)
 router.get('/verify/:token', async (req, res) => {
@@ -295,16 +453,45 @@ router.get('/verify/:token', async (req, res) => {
       return res.status(404).json({ error: 'Document not found.' });
     }
 
+    // Load PDF to get dimensions
+    let pdfBytes;
+    const documentFileName = path.basename(doc.file_path);
+    if (isSupabaseConfigured) {
+      const bucketName = process.env.SUPABASE_BUCKET_NAME || 'pdfs';
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .download(documentFileName);
+      if (!error) pdfBytes = await data.arrayBuffer();
+    } else {
+      const localPath = path.join(UPLOADS_DIR, documentFileName);
+      if (fs.existsSync(localPath)) pdfBytes = fs.readFileSync(localPath);
+    }
+
+    let dimensions = { width: 612, height: 792 }; // fallback
+    if (pdfBytes) {
+      try {
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const pages = pdfDoc.getPages();
+        if (pages.length > 0) {
+          const { width, height } = pages[0].getSize();
+          dimensions = { width, height };
+        }
+      } catch (err) {
+        console.error('Failed to parse PDF dimensions for guest', err);
+      }
+    }
+
     res.json({
       signature: sig,
       document: {
         id: doc.id,
         name: doc.name,
         file_path: doc.file_path,
-        status: doc.status
+        status: doc.status,
+        dimensions
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Verify token error:', error);
     res.status(500).json({ error: error.message || 'Verification failed.' });
   }
@@ -314,7 +501,7 @@ router.get('/verify/:token', async (req, res) => {
 router.post('/guest-sign/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    const { signatureImageBase64, status, reason } = req.body; // status can be 'Signed' or 'Rejected'
+    const { signatureImageBase64, status, reason, x, y, page } = req.body; // status can be 'Signed' or 'Rejected'
 
     const JWT_SECRET = process.env.JWT_SECRET || 'super_cute_and_secure_jwt_secret_key_12345';
 
@@ -401,12 +588,16 @@ router.post('/guest-sign/:token', async (req, res) => {
     }
 
     // Draw on page
-    const targetPageNum = Math.min(sig.page - 1, pages.length - 1);
+    const targetX = x !== undefined ? parseFloat(x) : sig.x;
+    const targetY = y !== undefined ? parseFloat(y) : sig.y;
+    const targetPageNumVal = page !== undefined ? parseInt(page, 10) : sig.page;
+
+    const targetPageNum = Math.min(targetPageNumVal - 1, pages.length - 1);
     const targetPage = pages[targetPageNum];
     const { width, height } = targetPage.getSize();
 
-    const xPos = (sig.x / 100) * width;
-    const yPos = height - ((sig.y / 100) * height) - 40;
+    const xPos = (targetX / 100) * width;
+    const yPos = height - ((targetY / 100) * height) - 40;
 
     if (embeddedImage) {
       targetPage.drawImage(embeddedImage, {
@@ -421,15 +612,19 @@ router.post('/guest-sign/:token', async (req, res) => {
         y: yPos + 15,
         size: 9,
         font: standardFont,
-        color: rgb(0.1, 0.4, 0.8),
+        color: rgb(0.0, 0.0, 0.0),
       });
     }
 
-    // Update signature status to Signed
+    // Update signature status to Signed, updating coordinates as well
     await db.signatures.updateStatus(sig.id, {
       status: 'Signed',
-      signedAt: new Date().toISOString()
+      signedAt: new Date().toISOString(),
+      x: targetX,
+      y: targetY,
+      page: targetPageNumVal
     });
+
 
     // Save modified PDF
     const modifiedPdfBytes = await pdfDoc.save();
@@ -486,7 +681,7 @@ router.post('/guest-sign/:token', async (req, res) => {
       status: 'Signed',
       pdfUrl: finalizedFilePath
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Guest signing error:', error);
     res.status(500).json({ error: error.message || 'Failed to sign document.' });
   }

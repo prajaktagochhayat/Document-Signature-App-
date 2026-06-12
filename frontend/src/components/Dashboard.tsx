@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UploadPanel } from './UploadPanel';
 import { Editor } from './Editor';
-import { FileText, Calendar, ChevronRight, Eye, Trash2, Search, CheckCircle, Clock, XCircle, Share2, Award, Info, FileSpreadsheet, Plus } from 'lucide-react';
+import { VisualSignEditor } from './VisualSignEditor';
+import { useAuth } from '../context/AuthContext';
+import { FileText, Calendar, ChevronRight, Eye, Search, CheckCircle, Clock, XCircle, Share2, Award, Info, Plus, Sparkles } from 'lucide-react';
+
 import confetti from 'canvas-confetti';
 
 interface Document {
@@ -16,6 +19,7 @@ interface Document {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export const Dashboard: React.FC = () => {
+  const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -23,31 +27,42 @@ export const Dashboard: React.FC = () => {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [signatures, setSignatures] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [finalizing, setFinalizing] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  const handleFinalize = async () => {
-    if (!selectedDoc) return;
-    setFinalizing(true);
+  // Upgraded sign flow states
+  const [isVisualSignOpen, setIsVisualSignOpen] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [requestEmail, setRequestEmail] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [lastPromptedDocId, setLastPromptedDocId] = useState<string | null>(null);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(generatedLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRequestSignature = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDoc || !requestEmail) return;
     try {
-      const response = await axios.post(`${API_URL}/signatures/finalize`, {
+      const response = await axios.post(`${API_URL}/signatures/request`, {
         documentId: selectedDoc.id,
+        signerEmail: requestEmail
       });
-      alert('Document compiled and signed successfully!');
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
-      fetchDocuments();
-      setSelectedDoc(response.data.signedDocument || null);
+      setGeneratedLink(response.data.link);
+      // Refetch signatures to show on list
+      axios.get(`${API_URL}/signatures/${selectedDoc.id}`)
+        .then((res) => setSignatures(res.data))
+        .catch((err) => console.error(err));
     } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.error || 'Failed to finalize PDF.');
-    } finally {
-      setFinalizing(false);
+      alert(err.response?.data?.error || 'Failed to generate guest signing link');
     }
   };
+
 
   const fetchDocuments = async () => {
     try {
@@ -80,6 +95,17 @@ export const Dashboard: React.FC = () => {
     } else {
       setSignatures([]);
       setAuditLogs([]);
+    }
+  }, [selectedDoc]);
+
+  // Autoprompt download when viewing a signed document
+  useEffect(() => {
+    if (selectedDoc && selectedDoc.status === 'Signed' && lastPromptedDocId !== selectedDoc.id) {
+      setDownloadUrl(selectedDoc.file_path);
+      setShowDownloadPrompt(true);
+      setLastPromptedDocId(selectedDoc.id);
+    } else if (selectedDoc && selectedDoc.status !== 'Signed') {
+      setLastPromptedDocId(null);
     }
   }, [selectedDoc]);
 
@@ -251,45 +277,129 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               {selectedDoc.status === 'Signed' ? (
-                <a
-                  href={getPdfUrl(selectedDoc.file_path)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="col-span-2 py-2.5 px-3 bg-pastel-green-solid hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] text-center"
-                >
-                  <Award className="w-4 h-4" />
-                  Download Signed PDF
-                </a>
-              ) : (
-                <>
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={getPdfUrl(selectedDoc.file_path)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="py-2.5 px-3 bg-pastel-green-solid hover:bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] text-center"
+                  >
+                    <Award className="w-4 h-4" />
+                    Download PDF
+                  </a>
                   <button
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => {
+                      setIsVisualSignOpen(true);
+                    }}
                     className="py-2.5 px-3 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Place Fields
+                    Re-sign PDF
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setIsVisualSignOpen(true);
+                    }}
+                    className="py-2.5 px-3 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.97] cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Sign PDF
                   </button>
                   <button
-                    onClick={handleFinalize}
-                    disabled={finalizing || signatures.length === 0}
-                    className={`py-2.5 px-3 bg-pastel-green-light border border-pastel-green-border text-pastel-green-text hover:bg-emerald-50 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer ${
-                      finalizing || signatures.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    onClick={() => {
+                      setShowRequestForm(!showRequestForm);
+                      setGeneratedLink('');
+                      setRequestEmail('');
+                    }}
+                    className="py-2.5 px-3 bg-pastel-purple-light border border-pastel-purple-border text-pastel-purple-text hover:bg-brand-50 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer"
                   >
-                    {finalizing ? (
-                      <span className="w-4 h-4 border-2 border-pastel-green-text/30 border-t-pastel-green-text rounded-full animate-spin"></span>
-                    ) : (
-                      <>
-                        <Award className="w-4 h-4" />
-                        Compile & Sign
-                      </>
-                    )}
+                    <Share2 className="w-4 h-4" />
+                    Request Sign
                   </button>
-                </>
+                  
+                  {/* Keep old buttons for advanced placement */}
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="col-span-2 py-2 bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 text-[10px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    Advanced: Place Coordinates
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* Request Signature Form overlay-in-sidebar */}
+            {showRequestForm && selectedDoc && selectedDoc.status !== 'Signed' && (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5 animate-pulse-pastel [animation-duration:5s]">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-brand-500 uppercase tracking-wider pl-0.5">
+                    Request External Signature
+                  </span>
+                  <button
+                    onClick={() => {
+                      setShowRequestForm(false);
+                      setGeneratedLink('');
+                      setRequestEmail('');
+                    }}
+                    className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                {!generatedLink ? (
+                  <form onSubmit={handleRequestSignature} className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase pl-0.5">
+                        Signer's Email Address
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={requestEmail}
+                        onChange={(e) => setRequestEmail(e.target.value)}
+                        placeholder="john@example.com"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-200 text-slate-800"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                    >
+                      Generate Signing Link
+                    </button>
+                  </form>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-[10px] text-slate-500 font-semibold pl-0.5">
+                      Guest signature link generated successfully! You can send this link to the signer:
+                    </p>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        readOnly
+                        value={generatedLink}
+                        className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] font-medium text-slate-500 truncate"
+                      />
+                      <button
+                        onClick={handleCopyLink}
+                        type="button"
+                        className="px-3 bg-brand-50 border border-brand-200 text-brand-700 text-[10px] font-bold rounded-xl hover:bg-brand-100 transition-all flex items-center justify-center"
+                      >
+                        {copied ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
 
             {/* Status Info */}
             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
@@ -361,7 +471,7 @@ export const Dashboard: React.FC = () => {
                   Open in New Tab
                 </a>
               </div>
-              <div className="w-full h-64 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden relative group">
+              <div className="w-full h-[480px] bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden relative group">
                 <iframe
                   src={`${getPdfUrl(selectedDoc.file_path)}#toolbar=0`}
                   title="PDF Preview"
@@ -428,6 +538,73 @@ export const Dashboard: React.FC = () => {
               .catch((err) => console.error(err));
           }}
         />
+      )}
+
+      {/* Visual Self-Signing Editor */}
+      {isVisualSignOpen && selectedDoc && (
+        <VisualSignEditor
+          documentId={selectedDoc.id}
+          documentName={selectedDoc.name}
+          pdfUrl={getPdfUrl(selectedDoc.file_path)}
+          isSelfSign={true}
+          defaultSignerName={user?.name || ''}
+          onClose={() => setIsVisualSignOpen(false)}
+          onSignSuccess={(signedUrl) => {
+            setIsVisualSignOpen(false);
+            setDownloadUrl(signedUrl);
+            setShowDownloadPrompt(true);
+            fetchDocuments();
+            try {
+              confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+              });
+            } catch (e) {
+              console.error('Confetti failed to run', e);
+            }
+          }}
+        />
+      )}
+
+      {/* Download Signed PDF Prompt Modal */}
+      {showDownloadPrompt && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full border border-slate-100 shadow-2xl flex flex-col items-center text-center gap-5 animate-float [animation-duration:8s]">
+            <div className="w-16 h-16 bg-pastel-green-light rounded-full flex items-center justify-center border border-pastel-green-border animate-bounce">
+              <CheckCircle className="w-9 h-9 text-pastel-green-solid" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-slate-800 flex items-center justify-center gap-1.5 font-sans">
+                Document Signed!
+                <Sparkles className="w-5 h-5 text-pastel-orange-solid animate-pulse-pastel" />
+              </h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                The signature has been successfully compiled and embedded into your document. Would you like to download the signed PDF?
+              </p>
+            </div>
+
+            <div className="flex gap-3 w-full mt-2">
+              <button
+                onClick={() => setShowDownloadPrompt(false)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-2xl transition-all cursor-pointer border border-slate-200"
+              >
+                Maybe Later
+              </button>
+              
+              <a
+                href={getPdfUrl(downloadUrl)}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowDownloadPrompt(false)}
+                className="flex-1 py-3 bg-pastel-green-solid hover:bg-emerald-600 text-white text-xs font-bold rounded-2xl transition-all shadow-md active:scale-[0.97] text-center"
+              >
+                Download PDF
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

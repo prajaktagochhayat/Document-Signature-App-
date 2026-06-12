@@ -20,7 +20,7 @@ router.get('/:docId', authMiddleware, async (req, res) => {
 
     const logs = await db.auditLogs.listByDocId(docId);
     res.json(logs);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Fetch audit logs error:', error);
     res.status(500).json({ error: error.message || 'Failed to retrieve audit logs.' });
   }
