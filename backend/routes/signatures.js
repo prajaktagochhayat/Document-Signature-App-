@@ -137,7 +137,7 @@ router.post('/finalize', authMiddleware, async (req, res) => {
       // Convert percentage coordinates back to PDF points
       const xPos = (sig.x / 100) * width;
       // In PDF, Y goes from bottom to top. Our coordinate goes top to bottom.
-      const yPos = height - ((sig.y / 100) * height) - 40;
+      const yPos = height - ((sig.y / 100) * height) - 35;
 
       if (embeddedImage) {
         // Draw the visual base64 canvas signature
@@ -289,7 +289,7 @@ router.post('/self-sign', authMiddleware, async (req, res) => {
     const { width, height } = targetPage.getSize();
 
     const xPos = (x / 100) * width;
-    const yPos = height - ((y / 100) * height) - 40;
+    const yPos = height - ((y / 100) * height) - 35;
 
     targetPage.drawImage(embeddedImage, {
       x: xPos,
@@ -597,7 +597,7 @@ router.post('/guest-sign/:token', async (req, res) => {
     const { width, height } = targetPage.getSize();
 
     const xPos = (targetX / 100) * width;
-    const yPos = height - ((targetY / 100) * height) - 40;
+    const yPos = height - ((targetY / 100) * height) - 35;
 
     if (embeddedImage) {
       targetPage.drawImage(embeddedImage, {

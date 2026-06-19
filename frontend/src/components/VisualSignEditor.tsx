@@ -21,7 +21,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const PDFIframe = React.memo(({ url }: { url: string }) => {
   return (
     <iframe
-      src={`${url}#toolbar=0`}
+      src={`${url}#toolbar=0&navpanes=0&view=Fit`}
       title="PDF Canvas View"
       className="w-full h-full border-none pointer-events-none opacity-85"
     />
@@ -72,18 +72,27 @@ export const VisualSignEditor: React.FC<VisualSignEditorProps> = ({
     e.preventDefault();
     isDraggingRef.current = true;
 
+    // Get the click position relative to the signature block to prevent jumping
+    const block = e.currentTarget as HTMLDivElement;
+    const blockRect = block.getBoundingClientRect();
+    const offsetX = e.clientX - blockRect.left;
+    const offsetY = e.clientY - blockRect.top;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!isDraggingRef.current || !containerRef.current) return;
 
       const rect = containerRef.current.getBoundingClientRect();
       
-      // Calculate relative coordinates in percentage
-      let newX = ((moveEvent.clientX - rect.left) / rect.width) * 100;
-      let newY = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      // Calculate relative coordinates in percentage, subtracting the click offset
+      let newX = ((moveEvent.clientX - offsetX - rect.left) / rect.width) * 100;
+      let newY = ((moveEvent.clientY - offsetY - rect.top) / rect.height) * 100;
 
-      // Clamp coordinates inside bounds (accounting for signature block size roughly 25% x 7%)
-      newX = Math.max(0, Math.min(newX, 75));
-      newY = Math.max(0, Math.min(newY, 93));
+      const sigWidthPct = dimensions ? (110 / dimensions.width) * 100 : 18;
+      const sigHeightPct = dimensions ? (35 / dimensions.height) * 100 : 4.4;
+
+      // Clamp coordinates inside bounds
+      newX = Math.max(0, Math.min(newX, 100 - sigWidthPct));
+      newY = Math.max(0, Math.min(newY, 100 - sigHeightPct));
 
       setX(newX);
       setY(newY);
@@ -206,26 +215,32 @@ export const VisualSignEditor: React.FC<VisualSignEditorProps> = ({
                 <PDFIframe url={pdfUrl} />
 
                 {/* Overlaid draggable signature block */}
-                {signatureImage && (
-                  <div
-                    onMouseDown={handleMouseDown}
-                    style={{
-                      left: `${x}%`,
-                      top: `${y}%`,
-                    }}
-                    className="absolute w-[140px] h-[55px] bg-white/95 border-2 border-brand-400 rounded-xl shadow-lg cursor-move flex items-center justify-center p-1.5 z-10 transition-shadow select-none group border-dashed"
-                    title="Drag to place signature"
-                  >
-                    <img
-                      src={signatureImage}
-                      alt="Signature Overlay"
-                      className="max-w-full max-h-full object-contain pointer-events-none"
-                    />
-                    <div className="absolute -top-3 -right-3 w-6 h-6 bg-brand-500 rounded-full flex items-center justify-center shadow text-white pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Move className="w-3.5 h-3.5" />
+                {signatureImage && (() => {
+                  const sigWidthPct = dimensions ? (110 / dimensions.width) * 100 : 18;
+                  const sigHeightPct = dimensions ? (35 / dimensions.height) * 100 : 4.4;
+                  return (
+                    <div
+                      onMouseDown={handleMouseDown}
+                      style={{
+                        left: `${x}%`,
+                        top: `${y}%`,
+                        width: `${sigWidthPct}%`,
+                        height: `${sigHeightPct}%`,
+                      }}
+                      className="absolute bg-white/95 border-2 border-brand-400 rounded-xl shadow-lg cursor-move flex items-center justify-center p-1 z-10 transition-shadow select-none group border-dashed"
+                      title="Drag to place signature"
+                    >
+                      <img
+                        src={signatureImage}
+                        alt="Signature Overlay"
+                        className="max-w-full max-h-full object-contain pointer-events-none"
+                      />
+                      <div className="absolute -top-3 -right-3 w-6 h-6 bg-brand-500 rounded-full flex items-center justify-center shadow text-white pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Move className="w-3.5 h-3.5" />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>
